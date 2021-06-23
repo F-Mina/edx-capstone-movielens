@@ -1,0 +1,484 @@
+---
+title: "Capstone Edx - Movielens Project"
+author: "Francielle Mina"
+date: "17/05/2021"
+output:
+  bookdown::pdf_document2:
+    latex_engine: lualatex
+  tufte::tufte_handout:
+    latex_engine: xelatex
+---
+1. Introduction: 
+
+
+  The current project is a final assessment to complete a Data Science certificate professional. There is a manny different language commonly used for data analysis and data science. According Zumel N and Mount Jhon (2019), data science is a definition as managing the process that can transform hypothesis and data into actionable predictions.  With the advance on the internet and production of data, today is a need to filter, prioritize, and deliver efficient information to the customer or user.
+    Nowadays, big company such as Netflix, Amazon, Spotify utilize the Recommendation system or Recommender system. This system is a class of algorithms that can suggest “relevant” items to users by searching through the large volume of dynamically generated information to provide users with personalized content and services. One of the parameters recommender system is RMSE, the square root of the variance of the residuals. The RMSE computes the mean value of all the differences squared between the true and the predicted ratings and then proceeds to calculate the square root out of the result. Consequently, significant errors may dramatically affect the RMSE rating, rendering the RMSE metric most valuable when significant errors are unwanted. RMSE is a measure to show how accurately the model predicts the response, and it is the essential criteria for fit if the primary purpose of the model is prediction. In this project, we will be using the data set Movielens provided by the Edx course. Also, the dataset Movielens has 25 million ratings and one million tag applications applied to 62,000 movies by 162,000 users. 
+
+2. Objective: Predict movie to users by rating from the dataset with low accurately RMSE. 
+    
+2.1 Dataset: The dataset can be found:https://grouplens.org/datasets/movielens/10m/
+http://files.grouplens.org/datasets/movielens/ml-10m.zip
+
+
+3. Method and analysis:
+
+For this project, we are using several packages from CRAN to assist our analysis. All the packages will be load along with the development of the project. First of all, we downloaded the dataset from the website, split the data in validation and train, and called edx. After that, the data edx also split into train and test. When the RMSE reaches the goal, the validation set will use for the final validation (unknow) model and predict results. The following steps for the project will be building, interpreting RMSE results and data exploration. 
+
+3.1 Explore dataset Edx.
+
+First of all, explore and analyse the data set edx. It's essential to understand how the data are structured, characteristics for better knowledge. 
+    
+```{r}
+# MovieLens 10M dataset:
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(RColorBrewer)) install.packages("RColorBrewer", repos = "http://cran.us.r-project.org")
+
+
+library(tidyverse)
+library(caret)
+library(data.table)
+library(RColorBrewer)
+#https://grouplens.org/datasets/movielens/10m/
+#http://files.grouplens.org/datasets/movielens/ml-10m.zip
+
+dl <- tempfile()
+download.file("http://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
+
+ratings <- fread(text = gsub("::", "\t", readLines(unzip(dl, "ml-10M100K/ratings.dat"))),
+                 col.names = c("userId", "movieId", "rating", "timestamp"))
+
+movies <- str_split_fixed(readLines(unzip(dl, "ml-10M100K/movies.dat")), "\\::", 3)
+colnames(movies) <- c("movieId", "title", "genres")
+
+movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(movieId),
+                                           title = as.character(title),
+                                           genres = as.character(genres))
+
+
+movielens <- left_join(ratings, movies, by = "movieId")
+
+# Validation set will be 10% of MovieLens data
+set.seed(1) # if using R 3.5 or earlier, use `set.seed(1)`
+test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.1, list = FALSE)
+edx <- movielens[-test_index,]
+temp <- movielens[test_index,]
+
+# Make sure userId and movieId in validation set are also in edx set
+validation <- temp %>% 
+  semi_join(edx, by = "movieId") %>%
+  semi_join(edx, by = "userId")
+
+# Add rows removed from validation set back into edx set
+removed <- anti_join(temp, validation)
+edx <- rbind(edx, removed)
+
+rm(dl, ratings, movies, test_index, temp, movielens, removed)
+```
+
+```{r}
+str(edx)
+```
+
+The function strc show us information on the object's structure and information about the class, length and content for each class. 
+
+```{r}
+head(edx)
+```
+The head function shows the first 6 rows. We can observe the data has 6 columns, userId, movieId, rating, timestamp, title, genres. 
+
+```{r}
+dim(edx)
+```
+
+The dim function returns the vector with the number of rows in the first element and the numbers of columns in the second element. 
+
+```{r}
+summary(edx)
+```
+
+The summary function is essential. Exhibits the statistics for each column. It can observe the minimum and maximum value in each column and the mean, median, and 3rd quartile. The column title and genres show us the length class and mode because these two columns are categorical data. 
+
+3.1.2 Data analysis Edx data
+
+
+3.1.2.1 Distribuition the Movies by ratings 
+
+```{r}
+library(RColorBrewer)
+edx %>% group_by(movieId) %>% summarise(n = n()) %>% ggplot(aes(n)) + geom_histogram(color = "black", bins = 20, fill = "#66CCFF") + ggtitle("Distribuition the Movies by rating") +
+  scale_x_log10() + xlab("Number of Rating") + ylab("Number of Movies") 
+
+n_distinct(edx$movieId)
+
+edx %>% group_by(movieId) %>% summarise(n = n()) %>% head()
+```
+
+The histogram shows how are distributed movies in the edx data set. Using the function n_distinct, it can observe there are 10677 movies in the edx data set. As well, it followed at distribution on the histogram. 
+
+
+3.1.2.2 Analysis of Distribuition by Users
+
+```{r}
+edx %>% group_by(userId) %>% summarise(n = n()) %>% ggplot(aes(n)) + geom_histogram(color = "black", bins = 20, fill = "#66CCFF") + ggtitle("Distribuiton of Users") + scale_x_log10() + xlab("Number of Ratings") + ylab("Number of Users")
+
+n_distinct(edx$userId)
+
+edx %>% group_by(userId) %>% summarise(n = n()) %>% head()
+```
+The histogram graph show us the distribuition of user on edx dataset, 69878 users
+
+
+3.1.2.3 Analysis of Ratings 
+```{r}
+edx %>% group_by(rating) %>% summarise(n = n()) %>% ggplot(aes(rating, n)) + geom_line(color = "#66CCFF") + geom_point() + scale_x_log10() + ggtitle("Rating Distribuition") + 
+  xlab("Rating") + ylab("Count")
+
+n_distinct(edx$rating)
+
+edx %>% group_by(rating) %>% summarise(n = n()) %>% head()
+```
+The graph and the n_distinct shows the 10 possibilities that the user can rantings from 0.5 to 5.0.
+
+3.2.1 Explore datset on Validation 
+
+Until now,  we can analyse the data set from edx before the split into train and test. Also, we can run data analysis on the validation dataset before the final validation and predict. 
+
+```{r}
+str(validation)
+```
+The dataset on validation has 999999 obs and 6 variables. This part of data has 90% from the original data. 
+
+
+```{r}
+head(validation)
+```
+The head function show the first 6 rows. We can observed the data has 6 columns, userId, movieId, rating, timestamp, title, genres.
+
+```{r}
+dim(validation)
+```
+The dim function returns the vector with the number of rows in the first element, and the numbers of columns the second element. The first argument has 999999 entries, and the second argument has 6 entries. 
+
+```{r}
+summary(validation)
+```
+The summary function show the statistics on dataset. Showing the mean, median and quartiles.  
+
+3.2.2 Data analysis on Validation dataset
+
+3.2.3  Analysis of Distribuition by Movies 
+
+```{r}
+validation %>% group_by(movieId) %>% summarise(n = n()) %>% ggplot(aes(n)) + geom_histogram(color = "black", bins = 20, fill = "#009999") + ggtitle("Distribuition the Movies by rating", subtitle = "Validation dataset") +
+  scale_x_log10() + xlab("Number of Rating") + ylab("Number of Movies")
+
+n_distinct(validation$movieId)
+```
+It can observe we have 9809 movies on dataset validation. 
+
+
+3.2.4  Analysis of Distribuition by Users
+
+```{r}
+validation %>% group_by(userId) %>% summarise(n = n()) %>% ggplot(aes(n)) + geom_histogram(color = "black", bins = 20, fill = "#009999") + ggtitle("Distribuition the Users", subtitle = "Validation dataset") +
+  scale_x_log10() + xlab("Number of Rating") + ylab("Number of Movies")
+
+n_distinct(validation$userId)
+```
+It can observe the distriution the user on validation set is 68534. 
+
+3.2.5 Analysis of Ratings 
+
+```{r}
+validation %>% group_by(rating) %>% summarise(n = n()) %>% ggplot(aes(rating, n)) + geom_line(color = "#009999") + geom_point() + scale_x_log10() + ggtitle("Rating Distribuition") + 
+  xlab("Rating") + ylab("Count")
+
+n_distinct(validation$rating)
+
+validation %>% group_by(rating) %>% summarise(n = n()) %>% head()
+```
+
+It observed in this graph the most significant rating it was to from 3 to 5.
+
+4.0 Results
+
+
+For this step, we are split the edx data set into train and test. The train data set has 10%, and the test has 90% of the original data. Also, it is an important method that evaluates the accuracy of the dataset. As explained before, train the part of data to allow the algorithm to predict the outcome. 
+
+4.1 Recommendations system
+
+ Exploring all the available digital data has created a challenge for big companies such as Google and Netflix to personalised and prioritise information to the user. For to solve this problem, the Recommendation system solves this. The Recommender system can predict whether a particular user would prefer an item or not based on the user’s profile. Netflix uses a recommendation system to predict how many stars a user will give a specific movie. In 2006 Netflix launched a challenge to the data science community, offering one million dollars to improve 10 % of the recommendation algorithm. This is a more complicated code. To see this, we are predicting the rating for movie i by user u, in principle, all other ratings related to movie i and by user u. 
+
+ Following this, the Netflix challenge is based on RMSE, residual mean squared error. Where is defined yu,i as the rating for movie i by user u and denote our prediction with ŷu,i. The RMSE is then defined as:
+
+ RMSE=√1N∑u,i(ŷu,i−yu,i)2
+ 
+ 
+ Also, we have discussed that RMSE can interpret similar to standard deviation, which means that when RMSE is bigger than 1, is not a good result. Here is a function that computes RMSE for vectors of rating and their corresponding predictors: 
+        RMSE <- function(true_ratings, predicted_ratings){
+         sqrt(mean((true_ratings - predicted_ratings)^2))
+         }
+
+To found the RMSE, we built the first model, which predicts rating for the movie regardless of users. 
+
+```{r}
+
+set.seed(1)
+test_index <- createDataPartition(y = edx$rating, times = 1, p = 0.1, list = FALSE)
+train_set <- edx[-test_index,]
+temp <- edx[test_index,]
+
+# make sure userId and movieId in validation set are also in edx set 
+test_set <- temp %>% semi_join(train_set, by = "movieId") %>% semi_join(train_set, by = "userId")
+
+# Add rows removed from validation set back into edx set
+
+removed <- anti_join(temp, test_set)
+
+train_set <- rbind(train_set, removed)
+
+rm(test_index, temp, removed)
+```
+
+
+This next step is an initial preparation. let's check the initial RMSE. 
+
+```{r}
+
+mu_hat <- mean(train_set$rating)
+mu_hat
+
+naive_rmse <- RMSE(test_set$rating, mu_hat)
+naive_rmse
+
+rmse_results <- tibble(method = "Naive RMSE", RMSE = naive_rmse)
+rmse_results
+```
+
+We can observe the results of RMSE is 1.060054, is not good enough. Let's include movie on train_set to see how RSME behave. 
+
+4.1.2 Effect on Movie (b_i)
+```{r}
+mu <- mean(train_set$rating) 
+b_i <- train_set %>% 
+group_by(movieId) %>% 
+summarize(b_i = mean(rating - mu))
+
+
+b_i %>% ggplot(aes(b_i)) + geom_histogram(bins = 20, fill = "#3300CC", color = "black") + ggtitle("Distribuition of Movie effect") + xlab("Distribuition of Movie effect") +
+  ylab("Count")
+```
+We can observe the histogram show the movie has a skewed on left distribuited. 
+
+4.1.3 predict moveis on test set 
+
+```{r}
+predicted_b_i <- mu + test_set %>% 
+  left_join(b_i, by='movieId') %>%
+  pull(b_i)
+rmse_1 <- RMSE(predicted_b_i, test_set$rating)
+rmse_1 
+
+rmse_results1 <-tibble(method = "Movie effect model on test set", RMSE = rmse_1)
+rmse_results1
+rmse_results1 %>% knitr::kable()
+
+```
+As as explain before, the RMSE result is predict on the test set. We observe the predict RMSE on test set improve the result.
+
+4.1.3 User effects on b_u
+```{r}
+b_u <- train_set %>% 
+  left_join(b_i, by='movieId') %>%
+  group_by(userId) %>%
+  summarize(b_u = mean(rating - mu - b_i))
+
+b_u %>% ggplot(aes(b_u)) + geom_histogram(bins = 20, fill = "#3300CC", color = "black") + ggtitle("User effect on distribuition") +
+  xlab("Users") + ylab("Count")
+```
+The histogram show the users is normaly distribuited. 
+
+4.1.4 predict values on test set (movie and user)
+
+```{r}
+predicted_b_u <- test_set %>% 
+  left_join(b_i, by="movieId") %>%
+  left_join(b_u, by="userId") %>%
+  mutate(pred = mu + b_i + b_u) %>%
+  pull(pred)
+
+rmse_2 <- RMSE(predicted_b_u, test_set$rating)
+rmse_2
+
+
+rmse_results2 <- tibble(method="Movie + User Effects Model", RMSE = rmse_2)
+rmse_results2 %>% knitr::kable()
+```
+
+5.0 Regularisation 
+
+It has improved RMSE on movie and user effect, but it still needs to improve. For to do this, the next step is Regularisation. 
+Regularization permits us to penalize large estimates that are formed using small sample sizes. The general idea behind regularization is to constrain the total variability of the effect sizes. Another way is the lambda parameter. When performing regularisation to reduce the variance of error prediction and overfitting, penalties are introduced on the model. Lambda purpose a good fit for training data, avoiding overfitting. 
+
+Before run regularisation, let's check the b_i effect on the movie. 
+
+
+5.1 Effect of movie. 
+
+```{r}
+titles <- train_set %>% 
+  select(movieId, title) %>% 
+  distinct()
+titles
+
+b_i %>% 
+  inner_join(titles, by = "movieId") %>% 
+  arrange(b_i) %>% 
+  select(title) %>%
+  slice(1:10) 
+```
+Here effect on b_i on movies.  List 10 worst movies. 
+
+```{r}
+
+b_i %>% 
+  inner_join(titles, by = "movieId") %>% 
+  arrange(-b_i) %>% 
+  select(title) %>%
+  slice(1:10)
+```
+Here Effect on b_i on 10 betters movies. 
+
+5.2 Regularisation and Lambda
+
+Below is the regularization function to choose the best value that minimizes the RMSE.
+
+```{r}
+lambda <- seq(0, 10, 0.25)
+
+regularisation <- sapply(lambda, function(l){
+  mu <- mean(train_set$rating)
+  b_i <- train_set %>% group_by(movieId) %>% summarise(b_i = sum(rating - mu)/(n()+l))
+  b_u <- train_set %>% left_join(b_i, by = "movieId") %>% group_by(userId) %>% summarise(b_u = sum(rating - b_i - mu)/(n()+l))
+  predicted_ratings <- train_set %>% left_join(b_i, by = "movieId") %>% left_join(b_u, by = "userId") %>% 
+  mutate(pred = mu + b_i + b_u) %>% .$pred
+  return(RMSE(train_set$rating, predicted_ratings))
+})
+
+regularisation
+
+
+qplot(lambda, regularisation)
+
+# This graph allows visualising the lambda. The minimum of lambda is 3.0. 
+
+lambdas <- lambda[which.min(regularisation)]
+lambdas
+```
+
+6.0 Build the third methodo with Regularisation 
+
+Compute movie effect with regularisation on the train set. The lambda chosen is 3.0, and the next step will see the effect on bi and bu. 
+bi(movie+regularisation) 
+bu(user+regularisation)
+
+
+6.1 Movie (bi) + Regularisation
+
+```{r}
+bi <- train_set %>% group_by(movieId) %>% summarise(bi = sum(rating - mu)/(n()+lambdas))
+bi
+
+bi %>% ggplot(aes(bi)) + geom_histogram(bins = 20, fill = "#336699", color = "black") + ggtitle("Effect of regularisation on Movies distribution") +
+  xlab("Movies") + ylab("Count")
+```
+It can see the skewed on the right on distribution. 
+
+6.2 Compute user effect with regularisation on trainset 
+
+```{r}
+bu <- train_set %>% left_join(bi, by = "movieId") %>% group_by(userId) %>% summarise(bu = sum(rating - bi - mu)/(n()+lambdas))
+bu
+
+bu %>% ggplot(aes(bu)) + geom_histogram(bins = 20, fill = "#336699", color = "black") + ggtitle("Effect of regularisation on Users distribution") +
+  xlab("Users") + ylab("Count")
+```
+It can see the distribution on user is normal. 
+
+6.3 Compute predicted value on teste set 
+
+```{r}
+predict_bi_bu <- test_set %>% left_join(bi, by = "movieId") %>% left_join(bu, by = "userId") %>%
+  mutate(pred = mu + bi + bu) %>% .$pred
+
+
+rmse_3 <- RMSE(test_set$rating, predict_bi_bu)
+rmse_3
+
+rmse_results_3 <- tibble(method = "Regularisation movie and user effect model on test set", RMSE = rmse_3)
+rmse_results_3
+```
+It's observed a decrease of RMSE on the regularisation model. 
+
+7.0 Final Validation 
+
+Along with the training and test, we can see the improvement of the value on RMSE. This step is the final validation on the validation set.
+
+```{r}
+mu_edx <- mean(edx$rating)
+mu_edx
+```
+
+7.1 Movie effect (bi) 
+
+```{r}
+bi_edx <- edx %>% 
+  group_by(movieId) %>%
+  summarize(bi = sum(rating - mu_edx)/(n()+lambdas)) 
+```
+
+7.2 User effect (bu)
+
+```{r}
+bu_edx <- edx %>% 
+  left_join(bi_edx, by="movieId") %>%
+  group_by(userId) %>%
+  summarize(bu = sum(rating - bi - mu_edx)/(n()+lambdas))  
+```
+
+7.3 Prediction on validation set 
+
+```{r}
+prediction_edx <- validation %>% 
+  left_join(bi_edx, by = "movieId") %>% 
+  left_join(bu_edx, by = "userId") %>% 
+  mutate(pred = mu_edx + bi + bu) %>%.$pred
+
+rmse_4 <- RMSE(validation$rating, prediction_edx)
+rmse_4
+
+rmse_results4 <- tibble(method = "Final regularisation, edx vs validation", RMSE = rmse_4)
+rmse_results4
+```
+
+8.0 Conclusions
+
+Following this course, we started preparing the data, split into train and test set. Before running RMSE, we analysed the data and the predicted, and it observed a little high value. For better results, we started developing RMSE and used two predictors, movie and user, without exploring other predictors. When running RMSE and regularisation, we found better results rather than the initial, around 0,8652226 is quite near the goal project < 0.86490. But still predict movies to users by ratings. But some hypothesis it can arise. During the development of the project, we tried two packages: recommenderlab and recosystem. However, during the development of these packages, it wasted a lot of time and ran out of the computer. Probably the effect of these two packages can give a lower RMSE on validation data. 
+
+
+9.0 References 
+
+
+https://cran.r-project.org/web/packages/recommenderlab/index.html
+
+https://cran.r-project.org/web/packages/recosystem/vignettes/introduction.html
+
+https://www.diva-portal.org/smash/get/diva2:927356/FULLTEXT01.pdf
+
+Recommendation systems: Principles, methods and evaluation https://doi.org/10.1016/j.eij.2015.06.005
+
+Zumel Nina, Mount Jhon: Practical Data Science with R. ed; Manning, 2019. book
+
+
